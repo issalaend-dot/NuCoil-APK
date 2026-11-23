@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Tanque biorreactor -->
+    <path
+        android:strokeColor="#38BDF8"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"
+        android:pathData="M34,30 L34,72 Q54,82 74,72 L74,30"/>
+    <!-- Eje agitador -->
+    <path
+        android:strokeColor="#94A3B8"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:pathData="M54,24 L54,68 M44,68 L64,68"/>
+    <!-- Espiras del serpentin -->
+    <path
+        android:strokeColor="#F59E0B"
+        android:strokeWidth="3.8"
+        android:strokeLineCap="round"
+        android:pathData="M39,40 L69,43 M39,49 L69,52 M39,58 L69,61"/>
+</vector>

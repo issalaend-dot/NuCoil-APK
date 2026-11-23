@@ -20,6 +20,22 @@ android {
         }
     }
 
+    signingConfigs {
+        release {
+            storeFile file("nucoil-release.jks")
+            storePassword "nucoil_release_key"
+            keyAlias "nucoil"
+            keyPassword "nucoil_release_key"
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfig signingConfigs.release
+            minifyEnabled false
+        }
+    }
+
     externalNativeBuild {
         cmake {
             path "src/main/cpp/CMakeLists.txt"
