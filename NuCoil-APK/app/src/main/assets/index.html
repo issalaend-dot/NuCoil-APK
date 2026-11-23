@@ -1,167 +1,938 @@
+
 <!doctype html>
 <html lang="es">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="theme-color" content="#f3f5f3">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="ThermaBio">
-  <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <link rel="manifest" href="manifest.webmanifest">
-  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
-  <meta name="description" content="ThermaBio es una calculadora gratuita para estimar la carga de enfriamiento y diseñar un serpentín para biorreactores y fermentaciones aeróbicas. Funciona sin APIs externas.">
-  <meta name="robots" content="index,follow,max-image-preview:large">
-  <link rel="canonical" href="https://eslaking289.github.io/serpentin-biorreactor/">
-  <meta property="og:type" content="website">
-  <meta property="og:site_name" content="ThermaBio">
-  <meta property="og:title" content="ThermaBio | Calculadora de serpentín para biorreactor">
-  <meta property="og:description" content="Calcula la carga térmica y estima el área y la geometría de un serpentín de enfriamiento para fermentaciones aeróbicas.">
-  <meta property="og:url" content="https://eslaking289.github.io/serpentin-biorreactor/">
-  <meta name="twitter:card" content="summary">
-  <script type="application/ld+json">
-    {
-      "@context": "https://schema.org",
-      "@type": "WebApplication",
-      "name": "ThermaBio",
-      "url": "https://eslaking289.github.io/serpentin-biorreactor/",
-      "description": "Calculadora académica para estimar la carga térmica y diseñar un serpentín de enfriamiento para biorreactores con fermentación aeróbica.",
-      "applicationCategory": "EngineeringApplication",
-      "operatingSystem": "Any",
-      "browserRequirements": "JavaScript enabled",
-      "isAccessibleForFree": true,
-      "inLanguage": "es"
+<script>
+(function(){
+  if (!window.AndroidBridge) return;
+  const origFetch = window.fetch;
+  window.fetch = async function(url, opts) {
+    const u = String(url);
+    if (u.includes('/api/calcular')) {
+      const qs = u.split('?')[1] || '';
+      const jsonStr = window.AndroidBridge.calcular(qs);
+      return new Response(jsonStr, {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      });
     }
-  </script>
-  <title>Diseño de serpentín de enfriamiento para biorreactor | ThermaBio</title>
-  <link rel="stylesheet" href="styles.css">
+    return origFetch.apply(this, arguments);
+  };
+  if (typeof window.AndroidBridge.guardarReporte === 'function') {
+    const OrigBlob = window.Blob;
+    window.Blob = function(parts, opts) {
+      if (opts && opts.type && opts.type.includes('text/plain') && Array.isArray(parts)) {
+        window.__nucoilLastReport = parts.join('');
+      }
+      return new OrigBlob(parts, opts);
+    };
+    const origCreateObj = URL.createObjectURL;
+    URL.createObjectURL = function(blob) {
+      if (window.__nucoilLastReport) {
+        const msg = window.AndroidBridge.guardarReporte(window.__nucoilLastReport);
+        window.__nucoilLastReport = null;
+        alert(msg);
+        return 'javascript:void(0)';
+      }
+      return origCreateObj.apply(this, arguments);
+    };
+  }
+})();
+</script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NuCoil | Ingeniería de Serpentines en Biorreactores</title>
+  <style>
+    :root {
+      --bg: #f4f1e8;
+      --panel: #ebe6d6;
+      --panel-alt: #19243e;
+      --border: #263554;
+      --text: #16201f;
+      --muted: #5a6b69;
+      --cyan: #1f6b6a;
+      --amber: #b08440;
+      --emerald: #1f6b6a;
+      --rose: #f43f5e;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.45;
+    }
+    header {
+      background: #fbfaf4;
+      border-bottom: 1px solid var(--border);
+      padding: 14px 24px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .badge-cpp {
+      background: linear-gradient(135deg, #1f6b6a, #2563eb);
+      color: #0e2a29;
+      font-weight: 800;
+      padding: 6px 10px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      letter-spacing: 0.5px;
+    }
+    .brand h1 { margin: 0; font-size: 1.1rem; }
+    .brand small { color: var(--muted); display: block; font-size: 0.78rem; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    button {
+      background: var(--panel-alt);
+      color: var(--text);
+      border: 1px solid var(--border);
+      padding: 7px 12px;
+      border-radius: 8px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: 0.15s;
+    }
+    button:hover { border-color: var(--cyan); color: #0e2a29; }
+    button.primary { background: #1f6b6a; border-color: #1f6b6a; color: #0e2a29; }
+    button.primary:hover { background: #0369a1; }
+    .container {
+      max-width: 1420px;
+      margin: 0 auto;
+      padding: 20px;
+      display: grid;
+      grid-template-columns: 440px 1fr;
+      gap: 20px;
+    }
+    @media (max-width: 1020px) { .container { grid-template-columns: 1fr; } }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 18px;
+    }
+    .card h2 {
+      margin: 0 0 12px 0;
+      font-size: 0.95rem;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--cyan);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .tabs { display: flex; gap: 6px; margin-bottom: 14px; }
+    .tab-btn { flex: 1; text-align: center; padding: 8px 6px; font-size: 0.78rem; }
+    .tab-btn.active { background: #1f6b6a; border-color: #1f6b6a; color: #0e2a29; }
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+    .field label { font-size: 0.76rem; color: var(--muted); }
+    .field input, .field select {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 7px 10px;
+      border-radius: 7px;
+      font-size: 0.88rem;
+      width: 100%;
+    }
+    .field input:focus, .field select:focus { outline: none; border-color: var(--cyan); }
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+    @media (max-width: 720px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); } }
+    .kpi {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+    }
+    .kpi span { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; }
+    .kpi strong { display: block; font-size: 1.45rem; margin-top: 4px; color: #0e2a29; }
+    .kpi small { font-size: 0.75rem; color: var(--cyan); }
+    .visual-grid {
+      display: grid;
+      grid-template-columns: 310px 1fr;
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+    @media (max-width: 820px) { .visual-grid { grid-template-columns: 1fr; } }
+    .svg-box {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .table-res { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    .table-res td { padding: 7px 6px; border-bottom: 1px solid var(--border); }
+    .table-res td:last-child { text-align: right; font-weight: 700; color: #0e2a29; font-variant-numeric: tabular-nums; }
+    .status-list { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 12px; }
+    @media (max-width: 720px) { .status-list { grid-template-columns: 1fr; } }
+    .pill {
+      padding: 10px 12px;
+      border-radius: 9px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      border: 1px solid;
+    }
+    .pill.ok { background: rgba(16, 185, 129, 0.12); border-color: var(--emerald); color: #6ee7b7; }
+    .pill.warn { background: rgba(244, 63, 94, 0.14); border-color: var(--rose); color: #fda4af; }
+    .error-banner {
+      background: rgba(244, 63, 94, 0.18);
+      border: 1px solid var(--rose);
+      color: #fecdd3;
+      padding: 12px;
+      border-radius: 10px;
+      margin-bottom: 16px;
+      display: none;
+      font-weight: 600;
+    }
+    .eq-box {
+      background: var(--bg);
+      border-left: 3px solid var(--amber);
+      padding: 10px 12px;
+      border-radius: 6px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.8rem;
+      margin-bottom: 8px;
+      color: #3c4a48;
+    }
+  </style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,300..500&family=JetBrains+Mono:wght@400;500;600&family=Spline+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style id="amber-editorial-theme">
+  :root, body[data-theme="light"] {
+    --ink: #16201f;
+    --abyss: #0e2a29;
+    --teal: #1f6b6a;
+    --teal-bright: #2d8b8b;
+    --parchment: #f4f1e8;
+    --parchment-deep: #ebe6d6;
+    --cream: #fbfaf4;
+    --gold: #b08440;
+    --rule: #d8d2bf;
+    --code-bg: #10302e;
+    --code-ink: #dfeae7;
+    --bg: #f4f1e8;
+    --card: #fbfaf4;
+    --border: #d8d2bf;
+    --text: #16201f;
+    --muted: #5a6b69;
+    --input-bg: #f4f1e8;
+    --input-border: #c4bca6;
+    --tab-bg: #ebe6d6;
+    --ok-bg: rgba(31, 107, 106, 0.11);
+    --ok-fg: #1f6b6a;
+    --ok-bd: rgba(31, 107, 106, 0.30);
+    --bad-bg: rgba(185, 28, 28, 0.13);
+    --bad-fg: #991b1b;
+    --bad-bd: #dc2626;
+  }
+
+  body[data-theme="dark"] {
+    --ink: #dfeae7;
+    --abyss: #f4f1e8;
+    --teal: #2d8b8b;
+    --teal-bright: #9ec9c6;
+    --parchment: #0b2221;
+    --parchment-deep: #153b38;
+    --cream: #10302e;
+    --gold: #e6b566;
+    --rule: #244b48;
+    --code-bg: #081918;
+    --code-ink: #dfeae7;
+    --bg: #0b2221;
+    --card: #10302e;
+    --border: #244b48;
+    --text: #dfeae7;
+    --muted: #9ec9c6;
+    --input-bg: #0b2221;
+    --input-border: #2b5451;
+    --tab-bg: #153b38;
+    --ok-bg: rgba(45, 139, 139, 0.18);
+    --ok-fg: #9ec9c6;
+    --ok-bd: rgba(158, 201, 198, 0.32);
+    --bad-bg: rgba(239, 68, 68, 0.22);
+    --bad-fg: #fca5a5;
+    --bad-bd: #ef4444;
+  }
+
+  body {
+    font-family: 'Spline Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+    background-color: var(--bg) !important;
+    color: var(--text) !important;
+    margin: 0 !important;
+    padding-top: 0 !important;
+    transition: background-color 0.2s ease, color 0.2s ease;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Barra superior y titulos principales */
+  header, .header, .topbar, .top-bar {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 50 !important;
+    background-color: var(--card) !important;
+    border-bottom: 1px solid var(--border) !important;
+    padding: 14px 24px !important;
+    margin-bottom: 18px !important;
+    box-shadow: 0 8px 20px -14px rgba(0, 0, 0, 0.35) !important;
+    color: var(--abyss) !important;
+  }
+  header > div, header .hero, header .brand-bar {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+  h1, h2, h3, h4, .title, .brand-title, header strong, header b, header span {
+    font-family: 'Fraunces', Georgia, serif !important;
+    color: var(--abyss) !important;
+    letter-spacing: -0.015em;
+  }
+  header .sub, header .subtitle, header p, header small {
+    font-family: 'Spline Sans', sans-serif !important;
+    color: var(--muted) !important;
+  }
+
+  /* Tarjetas, KPIs y bloques de formulas matematicas */
+  .card, .panel, .box, section,
+  .kpi, .kpi-card, .stat, .stat-card, .metric, .metric-card,
+  .formula, .formula-card, .formula-box, .eq, .equation, .math-box, .theory,
+  [class*="card"], [class*="kpi"], [class*="formula"], [class*="equation"],
+  body[data-theme="dark"] [data-dark-surface="1"] {
+    background: var(--card) !important;
+    color: var(--text) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 12px !important;
+    box-shadow: 0 12px 28px -22px rgba(0, 0, 0, 0.35) !important;
+  }
+
+  /* Contraste interno en formulas matematicas y textos en modo oscuro */
+  body[data-theme="dark"] section *,
+  body[data-theme="dark"] .formula *,
+  body[data-theme="dark"] [class*="formula"] *,
+  body[data-theme="dark"] [data-dark-surface="1"] * {
+    color: var(--text);
+  }
+  body[data-theme="dark"] section h2,
+  body[data-theme="dark"] section h3,
+  body[data-theme="dark"] section strong,
+  body[data-theme="dark"] section b,
+  body[data-theme="dark"] [data-dark-surface="1"] strong,
+  body[data-theme="dark"] [data-dark-surface="1"] b {
+    color: var(--abyss) !important;
+  }
+  body[data-theme="dark"] section code,
+  body[data-theme="dark"] .formula code,
+  body[data-theme="dark"] [data-dark-surface="1"] code {
+    background: #081918 !important;
+    color: #e6b566 !important;
+    border: 1px solid #244b48 !important;
+  }
+
+  /* Ocultar cualquier barra roja superior */
+  #error-banner, #alert-banner, .error-banner, .alert-danger, .top-error {
+    display: none !important;
+  }
+
+  .kpi-val, .kpi-value, .big-val, .stat-val, .metric-val,
+  .card strong, .card b, .res-val, .row-val, .data-val,
+  [id^="kpi"], [id^="res"], [id^="val"] {
+    font-family: 'JetBrains Mono', monospace !important;
+    color: var(--abyss) !important;
+    font-weight: 600 !important;
+  }
+
+  input, select {
+    font-family: 'JetBrains Mono', monospace !important;
+    background: var(--input-bg) !important;
+    color: var(--abyss) !important;
+    border: 1px solid var(--input-border) !important;
+    border-radius: 8px !important;
+  }
+  input:focus, select:focus {
+    outline: none !important;
+    border-color: var(--teal) !important;
+    box-shadow: 0 0 0 3px rgba(45, 139, 139, 0.18) !important;
+  }
+  input.nucoil-input-bad {
+    border-color: var(--bad-bd) !important;
+    background: var(--bad-bg) !important;
+  }
+
+  label, .sub, .subtitle, p, .muted {
+    color: var(--muted) !important;
+  }
+
+  code, pre, .mono, .val, .value, .badge, .pill, table td, table th {
+    font-family: 'JetBrains Mono', monospace !important;
+  }
+
+  /* Indicadores individuales inferiores: solo se pinta el recuadro afectado */
+  .badge, .pill {
+    background: var(--ok-bg) !important;
+    color: var(--ok-fg) !important;
+    border: 1px solid var(--ok-bd) !important;
+    border-radius: 8px !important;
+    transition: all 0.2s ease;
+  }
+  .nucoil-status-bad {
+    background: var(--bad-bg) !important;
+    color: var(--bad-fg) !important;
+    border: 1.5px solid var(--bad-bd) !important;
+    border-radius: 8px !important;
+    font-weight: 600 !important;
+  }
+
+  /* Pestanas */
+  .tab, .tab-btn, [role="tab"] {
+    font-family: 'JetBrains Mono', monospace !important;
+    background: var(--tab-bg) !important;
+    color: var(--abyss) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 8px !important;
+  }
+  .tab.active, .tab-btn.active, [role="tab"].active, [role="tab"][aria-selected="true"] {
+    background: var(--teal) !important;
+    color: #fbfaf4 !important;
+    border-color: var(--teal) !important;
+  }
+
+  /* Botones */
+  button:not(.tab):not(.tab-btn):not([role="tab"]), .btn {
+    font-family: 'JetBrains Mono', monospace !important;
+    background: var(--teal) !important;
+    color: #fbfaf4 !important;
+    border: 1px solid var(--teal) !important;
+    border-radius: 8px !important;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+  }
+  button.secondary, .btn-secondary, #btn-theme-main {
+    background: var(--card) !important;
+    color: var(--abyss) !important;
+    border: 1px solid var(--gold) !important;
+  }
+  #btn-abrir-plano {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    text-decoration: none !important;
+    font-family: 'JetBrains Mono', monospace !important;
+    font-size: 12px;
+    padding: 6px 12px;
+    border-radius: 8px !important;
+    background: var(--gold) !important;
+    color: #0b2221 !important;
+    border: 1px solid var(--gold) !important;
+    font-weight: 600 !important;
+  }
+
+  pre, .report-box, textarea {
+    background: var(--code-bg) !important;
+    color: var(--code-ink) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 10px !important;
+    font-family: 'JetBrains Mono', monospace !important;
+  }
+  hr {
+    border: 0 !important;
+    border-top: 1px solid var(--border) !important;
+  }
+</style>
+<style id="nucoil-math-contrast">
+  body[data-theme="dark"] [data-math-section="1"],
+  body[data-theme="dark"] [data-math-section="1"] div,
+  body[data-theme="dark"] [data-math-section="1"] p,
+  body[data-theme="dark"] [data-math-section="1"] span,
+  body[data-theme="dark"] [data-math-section="1"] li,
+  body[data-theme="dark"] [data-math-section="1"] code,
+  body[data-theme="dark"] [data-math-section="1"] sub,
+  body[data-theme="dark"] [data-math-section="1"] sup {
+    color: #dfeae7 !important;
+  }
+  body[data-theme="dark"] [data-math-section="1"] strong,
+  body[data-theme="dark"] [data-math-section="1"] b {
+    color: #f4f1e8 !important;
+  }
+  body[data-theme="light"] [data-math-section="1"] div,
+  body[data-theme="light"] [data-math-section="1"] p,
+  body[data-theme="light"] [data-math-section="1"] span,
+  body[data-theme="light"] [data-math-section="1"] li,
+  body[data-theme="light"] [data-math-section="1"] code {
+    color: #16201f !important;
+  }
+</style>
 </head>
-<body>
-  <div class="app-shell">
-    <aside class="sidebar">
-      <a class="brand" href="#inicio" aria-label="ThermaBio, inicio">
-        <span class="brand-mark">TB</span><span><strong>ThermaBio</strong><small>INGENIERÍA DE PROCESOS</small></span>
-      </a>
-      <div class="project-label">PROYECTO ACADÉMICO <span class="status-dot"></span></div>
-      <nav aria-label="Navegación principal">
-        <a class="nav-link active" href="#inicio"><span>▦</span> Panel de diseño</a>
-        <a class="nav-link" href="#entradas"><span>◉</span> Condiciones de operación</a>
-        <a class="nav-link" href="#resultados"><span>⌁</span> Resultados térmicos</a>
-        <a class="nav-link" href="#metodologia-completa"><span>∑</span> Metodología completa</a>
-      </nav>
-      <div class="sidebar-bottom"><div class="offline-card"><span class="offline-icon">◉</span><div><b>Cálculo local</b><small>Sin servicios externos</small></div><span class="live-dot"></span></div><p>FENÓMENOS DE TRANSPORTE<br>Cuatrimestre sep–dic 2026</p></div>
-    </aside>
-
-    <main id="inicio">
-      <header class="topbar"><div class="breadcrumb"><b>ThermaBio</b> / Diseño de serpentín</div><div class="top-actions"><span class="local-badge"><i></i> CÁLCULO EN VIVO · LOCAL</span><button id="installBtn" class="button button-quiet" type="button">Instalar aplicación</button><button id="resetBtn" class="button button-quiet" type="button">Restablecer</button></div></header>
-      <section class="hero"><div><div class="eyebrow">HERRAMIENTA DE INGENIERÍA · MODO SIN CONEXIÓN</div><h1>Serpentín de enfriamiento</h1><p>Estima la carga térmica de fermentación y dimensiona la superficie de intercambio para tus condiciones de proceso.</p></div><div class="hero-seal"><div class="seal-inner"><span>ΔT</span><small>THERMAL<br>DESIGN</small></div></div></section>
-
-      <section class="metrics" aria-label="Indicadores de diseño">
-        <article class="metric-card"><div class="metric-top"><span>CARGA DE ENFRIAMIENTO</span><span class="metric-icon warm">↘</span></div><div class="metric-value" id="metricDuty">— <small>kW</small></div><div class="metric-note" id="metricDutyNote">Balance térmico requerido</div></article>
-        <article class="metric-card"><div class="metric-top"><span>ÁREA REQUERIDA</span><span class="metric-icon teal">▤</span></div><div class="metric-value" id="metricArea">— <small>m²</small></div><div class="metric-note">Superficie de intercambio</div></article>
-        <article class="metric-card"><div class="metric-top"><span>LONGITUD DE TUBO</span><span class="metric-icon blue">⌁</span></div><div class="metric-value" id="metricLength">— <small>m</small></div><div class="metric-note" id="metricTurns">— vueltas estimadas</div></article>
-        <article class="metric-card"><div class="metric-top"><span>ESTADO DEL DISEÑO</span><span class="metric-icon green">✓</span></div><div class="metric-value state-value" id="metricState">—</div><div class="metric-note" id="metricStateNote">Validación térmica</div></article>
-      </section>
-
-      <div class="workspace-grid">
-        <section class="panel input-panel" id="entradas">
-          <div class="panel-heading"><div><span class="section-kicker">01 / PARÁMETROS</span><h2>Condiciones de operación</h2></div><span class="editable-tag">RECÁLCULO EN VIVO</span></div>
-          <div class="form-section"><div class="form-section-title"><span class="step-number">A</span><div><b>Generación de calor</b><small>Balance de energía de fermentación</small></div></div>
-            <div class="field-grid">
-              <label class="field"><span>Calor liberado, |ΔH<sub>r</sub>|</span><span class="input-wrap"><input id="dh" type="number" min="0" step="any" value="460"><em>kJ/mol</em></span><small>Usa la misma base molar que en el consumo ingresado</small></label>
-              <label class="field"><span>Consumo molar de referencia</span><span class="input-wrap"><input id="substrateRate" type="number" min="0" step="any" value="50"><em>mol/h</em></span><small>Base por defecto: O₂ (OUR); consistente con ΔHᵣ por mol de O₂</small></label>
-              <label class="field"><span>Potencia de agitación</span><span class="input-wrap"><input id="agitation" type="number" min="0" step="any" value="1.2"><em>kW</em></span><small>Potencia disipada al caldo</small></label>
-              <label class="field"><span>Factor de calor metabólico al caldo</span><span class="input-wrap"><input id="heatFactor" type="number" min="0" max="1" step="any" value="1"><em>fracción</em></span><small>Fracción de |ΔHᵣ| que se libera como calor</small></label>
-            </div>
-          </div>
-          <div class="form-section"><div class="form-section-title"><span class="step-number">B</span><div><b>Temperaturas del proceso</b><small>Fuerza impulsora de transferencia</small></div></div>
-            <div class="field-grid">
-              <label class="field"><span>Temperatura del caldo</span><span class="input-wrap"><input id="tBroth" type="number" step="any" value="30"><em>°C</em></span></label>
-              <label class="field"><span>Entrada del refrigerante</span><span class="input-wrap"><input id="tIn" type="number" step="any" value="10"><em>°C</em></span></label>
-              <label class="field"><span>Salida del refrigerante</span><span class="input-wrap"><input id="tOut" type="number" step="any" value="18"><em>°C</em></span></label>
-              <label class="field"><span>Caudal disponible de refrigerante</span><span class="input-wrap"><input id="coolantFlow" type="number" min="0" step="any" value="0.25"><em>kg/s</em></span></label>
-            </div>
-          </div>
-          <div class="form-section"><div class="form-section-title"><span class="step-number">C</span><div><b>Transferencia y geometría</b><small>Coeficientes y dimensiones del serpentín</small></div></div>
-            <div class="field-grid">
-              <label class="field"><span>Coeficiente lado caldo (exterior), h<sub>o</sub></span><span class="input-wrap"><input id="hBroth" type="number" min="1" step="any" value="1200"><em>W/m²·K</em></span></label>
-              <label class="field"><span>Cp del refrigerante</span><span class="input-wrap"><input id="cp" type="number" min="100" step="any" value="4185"><em>J/kg·K</em></span></label><label class="field"><span>Densidad del refrigerante</span><span class="input-wrap"><input id="rho" type="number" min="1" step="any" value="999"><em>kg/m³</em></span></label><label class="field"><span>Viscosidad del refrigerante</span><span class="input-wrap"><input id="mu" type="number" min="0.001" step="any" value="1.17"><em>mPa·s</em></span></label><label class="field"><span>Conductividad del refrigerante</span><span class="input-wrap"><input id="kf" type="number" min="0.01" step="any" value="0.589"><em>W/m·K</em></span></label>
-              <label class="field"><span>Conductividad de pared, k</span><span class="input-wrap"><input id="wallK" type="number" min="0.01" step="any" value="16"><em>W/m·K</em></span></label>
-              <label class="field"><span>Espesor de pared</span><span class="input-wrap"><input id="wallT" type="number" min="0" step="any" value="2"><em>mm</em></span></label>
-              <label class="field"><span>Factor de ensuciamiento total</span><span class="input-wrap"><input id="fouling" type="number" min="0" step="any" value="0.0002"><em>m²·K/W</em></span></label>
-              <label class="field"><span>Diámetro exterior del tubo</span><span class="input-wrap"><input id="tubeD" type="number" min="1" step="any" value="25"><em>mm</em></span></label>
-              <label class="field"><span>Diámetro del biorreactor</span><span class="input-wrap"><input id="tankD" type="number" min="0.1" step="any" value="1.2"><em>m</em></span></label>
-              <label class="field"><span>Holgura radial a la pared</span><span class="input-wrap"><input id="clearance" type="number" min="0" step="any" value="100"><em>mm</em></span></label>
-              <label class="field"><span>Separación vertical entre vueltas</span><span class="input-wrap"><input id="pitch" type="number" min="1" step="any" value="75"><em>mm</em></span></label>
-            </div>
-          </div>
-          <div class="input-footer"><span><span class="asterisk">*</span> Los resultados se actualizan al editar valores válidos.</span><button id="calculateBtn" class="button button-primary" type="button">Recalcular <span>↗</span></button></div>
-        </section>
-
-        <section class="panel result-panel" id="resultados">
-          <div class="panel-heading"><div><span class="section-kicker">02 / RESUMEN TÉRMICO</span><h2>Diseño propuesto</h2></div><button id="exportBtn" class="button button-outline" type="button">↓ <span>Exportar informe</span></button></div>
-          <div class="result-chart-card"><div class="chart-heading"><div><b>Balance de carga térmica</b><small>Contribuciones al deber de enfriamiento</small></div><span class="chart-unit">kW</span></div><div class="chart-content"><div class="chart-legend"><div><i class="legend-reaction"></i><span>Calor de reacción</span><b id="legendReaction">—</b></div><div><i class="legend-agit"></i><span>Agitación</span><b id="legendAgitation">—</b></div><div class="legend-total"><span>Deber total</span><b id="legendTotal">—</b></div></div><div class="bar-chart" id="barChart" aria-label="Gráfico de contribuciones de calor"><div class="bar-row"><span>Reacción</span><div class="bar-track"><i id="barReaction"></i></div></div><div class="bar-row"><span>Agitación</span><div class="bar-track"><i id="barAgitation"></i></div></div><div class="bar-row"><span>Q requerido</span><div class="bar-track total-track"><i id="barTotal"></i></div></div></div></div></div>
-          <div class="result-list"><div class="result-row"><div><b>Coeficiente global, U</b><small>Base de área exterior del tubo</small></div><strong id="outU">— <small>W/m²·K</small></strong></div><div class="result-row"><div><b>Diferencia media logarítmica, ΔT<sub>lm</sub></b><small>Caldo a temperatura constante</small></div><strong id="outLmtD">— <small>K</small></strong></div><div class="result-row"><div><b>Área de transferencia requerida</b><small>Q / (U · ΔT<sub>lm</sub>)</small></div><strong id="outArea">— <small>m²</small></strong></div><div class="result-row"><div><b>Longitud de tubo</b><small>Geometría helicoidal, diámetro exterior</small></div><strong id="outLength">— <small>m</small></strong></div><div class="result-row"><div><b>Número de vueltas</b><small>Altura ocupada estimada</small></div><strong id="outTurns">— <small>vueltas</small></strong></div><div class="result-row"><div><b>Caudal requerido de refrigerante</b><small>1000 · Q / (Cp · ΔT)</small></div><strong id="outFlow">— <small>kg/s</small></strong></div><div class="result-row"><div><b>Régimen en el tubo</b><small>Re y velocidad interior</small></div><strong id="outRe">— <small>Re</small></strong></div><div class="result-row"><div><b>Coeficiente interior calculado, h<sub>i</sub></b><small>Gnielinski con corrección helicoidal; estimación</small></div><strong id="outHi">— <small>W/m²·K</small></strong></div><div class="result-row"><div><b>Caída de presión estimada</b><small>Tubo recto equivalente; no incluye pérdidas helicoidales</small></div><strong id="outDp">— <small>kPa</small></strong></div></div>
-          <div class="insight-box"><span class="insight-icon">i</span><div><b id="insightTitle">Lectura del diseño</b><p id="insightText">Los resultados se actualizarán al ingresar las condiciones.</p></div></div>
-        </section>
+<body data-theme="light">
+<header>
+    <div class="brand">
+      
+      <div>
+        <h1>BioCoil Studio · Diseño de Serpentín de Enfriamiento</h1>
+        <small>Fenómenos de Transporte · Diseño Térmico de Biorreactores</small>
       </div>
-      <section class="method-strip" id="metodo"><div class="method-icon">∑</div><div><span class="section-kicker">CRITERIO DE CÁLCULO</span><h3>Supuestos visibles, resultados trazables</h3><p>El deber térmico suma el calor de reacción y la disipación por agitación. La superficie se calcula con resistencias térmicas en serie y diferencia media logarítmica. Revisa el método y las limitaciones antes de usar resultados para un diseño físico.</p></div><a href="#metodologia-completa">Ver metodología completa <span>↗</span></a></section>
+    </div>
+    <div class="toolbar">
+      <button type="button" onclick="cargarPreset('base')">Caso Base</button>
+      <button type="button" onclick="cargarPreset('doran')">Verificación Doran 9.13</button>
+      <button type="button" onclick="cargarPreset('alta')">Alta Densidad Celular</button>
+      <button type="button" class="primary" onclick="descargarReporte()">↓ Exportar Reporte (.txt)</button>
+    </div>
+  </header>
 
-      <section class="panel methodology-panel" id="metodologia-completa" aria-labelledby="methodTitle">
-        <div class="panel-heading method-main-heading"><div><span class="section-kicker">03 / MODELO MATEMÁTICO</span><h2 id="methodTitle">Metodología de cálculo</h2><p>Secuencia, ecuaciones, variables y alcance del modelo de diseño preliminar.</p></div><span class="editable-tag">BASE DE ÁREA EXTERIOR</span></div>
-        <div class="method-intro"><b>Objetivo</b><p>Estimar la carga que debe retirar el serpentín y el área de intercambio requerida suponiendo un caldo perfectamente mezclado a temperatura constante y un refrigerante que se calienta al circular por el tubo.</p></div>
-        <div class="method-grid">
-          <article class="method-card"><div class="method-card-title"><span class="step-number">01</span><div><b>Balance térmico</b><small>Carga de reacción y agitación</small></div></div>
-            <div class="equation">Q<sub>reacción</sub> = |ΔH<sub>r</sub>| · ṅ<sub>r</sub> · f<sub>calor</sub> / 3600</div>
-            <div class="equation">Q<sub>diseño</sub> = Q<sub>reacción</sub> + P<sub>agitación</sub></div>
-            <p>Con ΔH<sub>r</sub> en kJ/mol y consumo de la misma especie química ṅ<sub>r</sub> en mol/h, la división entre 3600 convierte kJ/h a kW. Los valores iniciales usan una base de O₂; si se ingresa consumo de sustrato, se debe ingresar ΔH<sub>r</sub> por mol de ese mismo sustrato. La potencia de agitación se considera disipada como calor en el caldo.</p>
-          </article>
-          <article class="method-card"><div class="method-card-title"><span class="step-number">02</span><div><b>Fuerza impulsora</b><small>Caldo isotermo y refrigerante variable</small></div></div>
-            <div class="equation">ΔT<sub>caliente</sub> = T<sub>caldo</sub> − T<sub>salida</sub></div>
-            <div class="equation">ΔT<sub>fría</sub> = T<sub>caldo</sub> − T<sub>entrada</sub></div>
-            <div class="equation equation-long">ΔT<sub>lm</sub> = <span class="fraction"><span>ΔT<sub>fría</sub> − ΔT<sub>caliente</sub></span><span>ln(ΔT<sub>fría</sub> / ΔT<sub>caliente</sub>)</span></span></div>
-            <p>La forma límite cuando las dos diferencias son iguales es su media aritmética. Se exige T<sub>caldo</sub> mayor que ambas temperaturas del refrigerante y T<sub>salida</sub> mayor que T<sub>entrada</sub>.</p>
-          </article>
-          <article class="method-card"><div class="method-card-title"><span class="step-number">03</span><div><b>Caudal requerido y convección interior</b><small>Refrigerante dentro del tubo</small></div></div>
-            <div class="equation equation-long">ṁ<sub>req</sub> = <span class="fraction"><span>1000 · Q<sub>diseño</sub></span><span>C<sub>p</sub> · (T<sub>salida</sub> − T<sub>entrada</sub>)</span></span></div>
-            <div class="equation equation-long">v = <span class="fraction"><span>4ṁ</span><span>ρπD<sub>i</sub>²</span></span><span class="formula-separator">Re =</span><span class="fraction"><span>4ṁ</span><span>πD<sub>i</sub>μ</span></span><span class="formula-separator">Pr =</span><span class="fraction"><span>μC<sub>p</sub></span><span>k<sub>f</sub></span></span></div>
-            <div class="equation">Nu = 3.66 (Re &lt; 2300); interpolación 2300–3000; Gnielinski (Re ≥ 3000)</div>
-            <div class="equation equation-long">h<sub>i</sub> = <span class="fraction"><span>Nu · k<sub>f</sub></span><span>D<sub>i</sub></span></span> · [1 + <span class="fraction"><span>3.5D<sub>i</sub></span><span>D<sub>hélice</sub></span></span>] (Re ≥ 2300)</div>
-            <p>Q se expresa en kW y C<sub>p</sub> en J/(kg·K), por eso se incluye el factor 1000. La correlación de Gnielinski se considera orientativa para 3000 ≤ Re ≤ 5×10⁶ y 0.5 ≤ Pr ≤ 2000; la transición y la corrección helicoidal también son aproximaciones.</p>
-          </article>
-          <article class="method-card"><div class="method-card-title"><span class="step-number">04</span><div><b>Resistencias térmicas</b><small>Coeficiente global referido al exterior</small></div></div>
-            <div class="equation equation-tall equation-long">1/U<sub>o</sub> = <span class="fraction"><span>1</span><span>h<sub>o</sub></span></span> + R<sub>f</sub> + <span class="fraction"><span>D<sub>o</sub> ln(D<sub>o</sub> / D<sub>i</sub>)</span><span>2k<sub>pared</sub></span></span> + <span class="fraction"><span>D<sub>o</sub></span><span>D<sub>i</sub>h<sub>i</sub></span></span></div>
-            <div class="equation">D<sub>i</sub> = D<sub>o</sub> − 2t<sub>pared</sub></div>
-            <p>El refrigerante circula por dentro del tubo (h<sub>i</sub>, calculado con Gnielinski y corrección 1 + 3.5 D<sub>i</sub>/D<sub>hélice</sub>) y el caldo baña el exterior (h<sub>o</sub>, ingresado) en W/(m²·K); k en W/(m·K); dimensiones en m y R<sub>f</sub> en m²·K/W.</p>
-          </article>
-          <article class="method-card"><div class="method-card-title"><span class="step-number">05</span><div><b>Área y longitud</b><small>Dimensionamiento térmico ideal</small></div></div>
-            <div class="equation equation-long">A<sub>o</sub> = <span class="fraction"><span>1000 · Q<sub>diseño</sub></span><span>U<sub>o</sub> · ΔT<sub>lm</sub></span></span></div>
-            <div class="equation">L = <span class="fraction"><span>A<sub>o</sub></span><span>π · D<sub>o</sub></span></span></div>
-            <p>Q<sub>diseño</sub> está en kW y se multiplica por 1000 para expresarlo en W. El área obtenida es exterior; por eso la longitud se calcula con el perímetro exterior del tubo.</p>
-          </article>
-          <article class="method-card"><div class="method-card-title"><span class="step-number">06</span><div><b>Geometría helicoidal</b><small>Vueltas y altura ocupada aproximadas</small></div></div>
-            <div class="equation">D<sub>hélice</sub> = D<sub>tanque</sub> − 2·holgura − D<sub>o</sub></div>
-            <div class="equation">L<sub>vuelta</sub> = √[(π · D<sub>hélice</sub>)² + p²]</div>
-            <div class="equation">N = L/L<sub>vuelta</sub> &nbsp; · &nbsp; H = N · p</div>
-            <p>El paso p se convierte de mm a m. La hélice se considera ideal, circular y de paso constante; el resultado no comprueba holguras, boquillas, soportes ni restricciones del recipiente.</p>
-          </article>
-          <article class="method-card"><div class="method-card-title"><span class="step-number">07</span><div><b>Presión y disponibilidad de caudal</b><small>Comprobaciones simplificadas</small></div></div>
-            <div class="equation equation-long">ΔP ≈ f<sub>D</sub> · <span class="fraction"><span>L</span><span>D<sub>i</sub></span></span> · <span class="fraction"><span>ρv²</span><span>2</span></span></div>
-            <div class="equation">f<sub>D</sub> = 64 / Re (laminar); &nbsp; f<sub>D</sub> ≈ [0.79 ln(Re) − 1.64]<sup>−2</sup> (turbulento)</div>
-            <div class="equation">r<sub>caudal</sub> = ṁ<sub>disponible</sub> / ṁ<sub>requerido</sub>; &nbsp; r ≥ 1: suficiente</div>
-            <p>La caída de presión usa una aproximación de tubo recto equivalente y no incluye la curvatura de la hélice, accesorios ni pérdidas locales. Las propiedades de refrigerante se pueden editar; los valores por defecto representan agua aproximadamente a 14 °C.</p>
-          </article>
+  <div class="container">
+    <!-- PANEL DE ENTRADAS -->
+    <div class="card">
+      <h2>Parámetros de Proceso <span style="font-size:0.72rem;color:var(--emerald);">● Live</span></h2>
+      <div class="tabs">
+        <button type="button" class="tab-btn active" onclick="abrirTab(0)">1. Calor & Rxn</button>
+        <button type="button" class="tab-btn" onclick="abrirTab(1)">2. Agitación</button>
+        <button type="button" class="tab-btn" onclick="abrirTab(2)">3. Serpentín</button>
+      </div>
+
+      <!-- TAB 1 -->
+      <div class="tab-pane active" id="pane-0">
+        <div class="field">
+          <label>Método de cálculo de entalpía (ΔHᵣ)</label>
+          <select id="modoEntalpia" onchange="toggleModoEntalpia(); recalcular();">
+            <option value="1">Balance estequiométrico (Calores de combustión, Doran Cap. 5)</option>
+            <option value="2">Ingreso directo por mol consumido (ej. base O₂)</option>
+          </select>
         </div>
-        <div class="method-reference-grid">
-          <article class="method-note"><h3>Entradas y unidades</h3><p>Calor de reacción: kJ/mol; consumo: mol/h; fracción de calor: adimensional entre 0 y 1; agitación: kW; temperaturas: °C (las diferencias son numéricamente iguales en K); caudal: kg/s; diámetros y espesores de entrada: mm, convertidos internamente a m; paso: mm; coeficientes y propiedades: unidades SI indicadas junto a cada campo.</p></article>
-          <article class="method-note"><h3>Supuestos y limitaciones</h3><ul><li>Estado estacionario, sin acumulación de energía ni pérdidas al ambiente.</li><li>Caldo perfectamente mezclado, con temperatura uniforme y constante.</li><li>Propiedades constantes; h<sub>o</sub> se ingresa y h<sub>i</sub> se estima con una correlación simplificada.</li><li>La entalpía y tasa molar deben compartir la misma base; el programa no calcula estequiometría ni ΔH<sub>r</sub>.</li><li>No incluye balance acoplado de temperaturas, pérdidas helicoidales de presión, transferencia de oxígeno, control ni diseño mecánico/sanitario.</li></ul></article>
+        <div id="grupoEstequio">
+          <div class="grid-2">
+            <div class="field"><label>ΔHc° Sustrato (kJ/mol)</label><input type="number" id="dhCombSustrato" value="2805" step="any"></div>
+            <div class="field"><label>ΔHc° Biomasa (kJ/C-mol)</label><input type="number" id="dhCombBiomasa" value="560" step="any"></div>
+          </div>
+          <div class="field"><label>Rendimiento biomasa/sustrato Y_X/S (C-mol/mol)</label><input type="number" id="rendimientoYxs" value="3.0" step="any"></div>
         </div>
-        <div class="method-warning"><b>Uso responsable</b><p>Este resultado es una estimación académica preliminar y no una especificación de fabricación u operación. Justifica las propiedades y coeficientes con fuentes técnicas aplicables, valida el balance con un cálculo independiente y solicita revisión de ingeniería antes de tomar decisiones físicas o de seguridad.</p></div>
-      </section>
-      <footer>THERMABIO <span>•</span> HERRAMIENTA ACADÉMICA DE DISEÑO <span class="footer-right">CÁLCULO EN EL DISPOSITIVO · SIN SERVICIOS EXTERNOS</span></footer>
-    </main>
+        <div id="grupoDirecto" style="display:none;">
+          <div class="field"><label>|ΔHᵣ| directo (kJ/mol referencia)</label><input type="number" id="dhDirecto" value="460" step="any"></div>
+        </div>
+        <div class="grid-2">
+          <div class="field"><label>Consumo molar (mol/h)</label><input type="number" id="tasaMolar" value="15.0" step="any"></div>
+          <div class="field"><label>Factor calor al caldo (0–1)</label><input type="number" id="factorCalor" value="1.0" min="0" max="1" step="any"></div>
+        </div>
+        <hr style="border:0;border-top:1px solid var(--border);margin:12px 0;">
+        <div class="grid-2">
+          <div class="field"><label>Temp. del caldo (°C)</label><input type="number" id="tCaldo" value="30" step="any"></div>
+          <div class="field"><label>Caudal ref. disp. (kg/s)</label><input type="number" id="flujoRefDisp" value="0.25" step="any"></div>
+          <div class="field"><label>Entrada refrigerante (°C)</label><input type="number" id="tRefIn" value="10" step="any"></div>
+          <div class="field"><label>Salida refrigerante (°C)</label><input type="number" id="tRefOut" value="18" step="any"></div>
+        </div>
+      </div>
+
+      <!-- TAB 2 -->
+      <div class="tab-pane" id="pane-1">
+        <div class="grid-2">
+          <div class="field"><label>Diámetro tanque Dₜ (m)</label><input type="number" id="diametroTanque" value="1.20" step="any"></div>
+          <div class="field"><label>Volumen líquido Vₗ (m³)</label><input type="number" id="volumenLiquido" value="1.10" step="any"></div>
+          <div class="field"><label>Diámetro impulsor Dₐ (m)</label><input type="number" id="diametroImpulsor" value="0.40" step="any"></div>
+          <div class="field"><label>Velocidad agitación N (rps)</label><input type="number" id="velocidadAgitacion" value="2.5" step="any"></div>
+          <div class="field"><label>Número de potencia Nₚ</label><input type="number" id="numeroPotencia" value="5.0" step="any"></div>
+          <div class="field"><label>Flujo aireación Q_g (m³/s)</label><input type="number" id="flujoAire" value="0.010" step="any"></div>
+        </div>
+        <hr style="border:0;border-top:1px solid var(--border);margin:12px 0;">
+        <div class="grid-2">
+          <div class="field"><label>Densidad caldo (kg/m³)</label><input type="number" id="rhoCaldo" value="1020" step="any"></div>
+          <div class="field"><label>Viscosidad caldo (Pa·s)</label><input type="number" id="muCaldo" value="0.0020" step="any"></div>
+          <div class="field"><label>Conductividad caldo (W/m·K)</label><input type="number" id="kCaldo" value="0.60" step="any"></div>
+          <div class="field"><label>Cp caldo (J/kg·K)</label><input type="number" id="cpCaldo" value="4100" step="any"></div>
+        </div>
+      </div>
+
+      <!-- TAB 3 -->
+      <div class="tab-pane" id="pane-2">
+        <div class="grid-2">
+          <div class="field"><label>Diámetro ext. tubo Dₒ (m)</label><input type="number" id="dExtTubo" value="0.025" step="any"></div>
+          <div class="field"><label>Espesor de pared (m)</label><input type="number" id="espesorPared" value="0.002" step="any"></div>
+          <div class="field"><label>Conductividad pared k (W/m·K)</label><input type="number" id="kPared" value="16.0" step="any"></div>
+          <div class="field"><label>Ensuciamiento R_f (m²·K/W)</label><input type="number" id="factorEnsuciamiento" value="0.0002" step="any"></div>
+          <div class="field"><label>Holgura radial pared (m)</label><input type="number" id="holguraPared" value="0.10" step="any"></div>
+          <div class="field"><label>Paso entre vueltas p (m)</label><input type="number" id="pasoVueltas" value="0.075" step="any"></div>
+        </div>
+        <hr style="border:0;border-top:1px solid var(--border);margin:12px 0;">
+        <div class="grid-2">
+          <div class="field"><label>Cp refrigerante (J/kg·K)</label><input type="number" id="cpRef" value="4185" step="any"></div>
+          <div class="field"><label>Densidad ref. (kg/m³)</label><input type="number" id="rhoRef" value="999" step="any"></div>
+          <div class="field"><label>Viscosidad ref. (Pa·s)</label><input type="number" id="muRef" value="0.00117" step="any"></div>
+          <div class="field"><label>Conductividad ref. (W/m·K)</label><input type="number" id="kRef" value="0.589" step="any"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PANEL DE RESULTADOS Y ESQUEMA -->
+    <div>
+      <div id="errorBanner" class="error-banner"></div>
+
+      <div class="kpi-grid">
+        <div class="kpi"><span>Carga Térmica Total</span><strong id="kpiQ">—</strong><small id="kpiQSub">Reacción + Agitación</small></div>
+        <div class="kpi"><span>Coeficiente Global Uₒ</span><strong id="kpiU">—</strong><small>W/(m²·K)</small></div>
+        <div class="kpi"><span>Área Requerida Aₒ</span><strong id="kpiA">—</strong><small id="kpiL">Longitud: — m</small></div>
+        <div class="kpi"><span>Vueltas del Serpentín</span><strong id="kpiN">—</strong><small id="kpiH">Altura: — m</small></div>
+      </div>
+
+      <div class="visual-grid">
+        <div class="svg-box">
+          <div style="font-size:0.78rem;color:var(--muted);margin-bottom:6px;font-weight:600;">ESQUEMA GEOMÉTRICO A ESCALA</div>
+          <svg id="reactorSvg" width="270" height="310" viewBox="0 0 270 310"></svg>
+          <div style="font-size:0.72rem;color:var(--muted);text-align:center;margin-top:4px;">
+            <span style="color:#1f6b6a;">■</span> Caldo &nbsp;
+            <span style="color:#b08440;">■</span> Serpentín sumergido &nbsp;
+            <span style="color:#f43f5e;">■</span> Fuera de nivel
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Desglose de Ingeniería</h2>
+          <table class="table-res">
+            <tr><td>Entalpía de reacción calculada (|ΔHᵣ|)</td><td id="resDh">—</td></tr>
+            <tr><td>Calor metabólico de fermentación (Q_rxn)</td><td id="resQrxn">—</td></tr>
+            <tr><td>Reynolds de agitación (Reₐ) / Potencia aireada (P_g)</td><td id="resPg">—</td></tr>
+            <tr><td>Diferencia media logarítmica (ΔT_lm)</td><td id="resDtlm">—</td></tr>
+            <tr><td>Coeficiente convectivo lado caldo (hₒ)</td><td id="resHo">—</td></tr>
+            <tr><td>Coeficiente convectivo interior (hᵢ) · Re tubo</td><td id="resHi">—</td></tr>
+            <tr><td>Diámetro de hélice (D_hélice) / Altura líquido (H_L)</td><td id="resGeom">—</td></tr>
+            <tr><td>Caudal requerido refrigerante (ṁ_req)</td><td id="resFlow">—</td></tr>
+            <tr><td>Caída de presión estimada (ΔP, corr. Ito)</td><td id="resDp">—</td></tr>
+          </table>
+
+          <div class="status-list">
+            <div class="pill ok" id="pillLiquid">Sumergencia: —</div>
+            <div class="pill ok" id="pillImpeller">Impulsor: —</div>
+            <div class="pill ok" id="pillFlow">Caudal: —</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Fundamentación Matemática del Modelo</h2>
+        <div class="eq-box">1. Entalpía y Balance: ΔHᵣ = ΔHc°_S − Y_X/S · ΔHc°_X  |  Q_rxn = (|ΔHᵣ| · ṅ · f_calor)/3600  |  P₀ = Nₚ·ρ·N³·Dₐ⁵  |  P_g = 0.706·(P₀²·N·Dₐ³/Q_g^0.56)^0.45</div>
+        <div class="eq-box">2. Convección Exterior e Interior: Nu_o = 0.87·Reₐ^0.62·Pr^(1/3) (Doran Fig. 9.17)  |  Nu_i = Nu_Gnielinski · (1 + 3.5·Dᵢ/D_hélice)</div>
+        <div class="eq-box">3. Resistencias y Geometría: 1/Uₒ = 1/hₒ + R_f + [Dₒ·ln(Dₒ/Dᵢ)]/(2k) + Dₒ/(Dᵢ·hᵢ)  |  Aₒ = Q_total/(Uₒ·ΔT_lm)  |  N = L / √[(π·D_hélice)² + p²]</div>
+      </div>
+    </div>
   </div>
-  <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="core.js"></script>
-  <script src="app.js"></script>
+
+  <script>
+    const campos = [
+      "modoEntalpia","dhCombSustrato","dhCombBiomasa","rendimientoYxs","dhDirecto","tasaMolar","factorCalor",
+      "diametroTanque","volumenLiquido","diametroImpulsor","velocidadAgitacion","numeroPotencia","flujoAire",
+      "rhoCaldo","muCaldo","kCaldo","cpCaldo","tCaldo","tRefIn","tRefOut","flujoRefDisp","cpRef","rhoRef",
+      "muRef","kRef","dExtTubo","espesorPared","kPared","factorEnsuciamiento","holguraPared","pasoVueltas"
+    ];
+
+    let ultimoJson = null;
+
+    function abrirTab(idx) {
+      document.querySelectorAll('.tab-btn').forEach((b, i) => b.classList.toggle('active', i === idx));
+      document.querySelectorAll('.tab-pane').forEach((p, i) => p.classList.toggle('active', i === idx));
+    }
+
+    function toggleModoEntalpia() {
+      const m = document.getElementById('modoEntalpia').value;
+      document.getElementById('grupoEstequio').style.display = (m === '1') ? 'block' : 'none';
+      document.getElementById('grupoDirecto').style.display = (m === '2') ? 'block' : 'none';
+    }
+
+    function cargarPreset(tipo) {
+      const set = (id, val) => { document.getElementById(id).value = val; };
+      if (tipo === 'base') {
+        set('modoEntalpia', '1'); set('dhCombSustrato', 2805); set('dhCombBiomasa', 560); set('rendimientoYxs', 3.0);
+        set('tasaMolar', 15.0); set('diametroTanque', 1.20); set('volumenLiquido', 1.10); set('diametroImpulsor', 0.40);
+        set('velocidadAgitacion', 2.5); set('flujoAire', 0.010); set('tCaldo', 30); set('tRefIn', 10); set('tRefOut', 18);
+        set('dExtTubo', 0.025); set('pasoVueltas', 0.075);
+      } else if (tipo === 'doran') {
+        set('modoEntalpia', '2'); set('dhDirecto', 460); set('tasaMolar', 85.0);
+        set('diametroTanque', 1.50); set('volumenLiquido', 2.00); set('diametroImpulsor', 0.50);
+        set('velocidadAgitacion', 3.0); set('flujoAire', 0.015); set('tCaldo', 32); set('tRefIn', 10); set('tRefOut', 20);
+        set('dExtTubo', 0.030); set('pasoVueltas', 0.075);
+      } else if (tipo === 'alta') {
+        set('modoEntalpia', '1'); set('dhCombSustrato', 2805); set('dhCombBiomasa', 560); set('rendimientoYxs', 2.8);
+        set('tasaMolar', 45.0); set('diametroTanque', 1.40); set('volumenLiquido', 1.80); set('diametroImpulsor', 0.48);
+        set('velocidadAgitacion', 3.5); set('flujoAire', 0.020); set('tCaldo', 35); set('tRefIn', 8); set('tRefOut', 18);
+        set('dExtTubo', 0.028); set('pasoVueltas', 0.065);
+      }
+      toggleModoEntalpia();
+      recalcular();
+    }
+
+    function dibujarEsquema(d) {
+      const svg = document.getElementById('reactorSvg');
+      const cx = 135, topY = 30, botY = 275;
+      const tankH_px = botY - topY;
+      const maxH_m = Math.max(d.alturaTanqueEst, d.alturaSerpentin * 1.15, 0.5);
+      const scaleY = tankH_px / maxH_m;
+      const tankW_px = Math.min(200, Math.max(110, d.diametroTanque * 115));
+      const leftX = cx - tankW_px / 2;
+
+      const liqH_px = Math.min(tankH_px, d.alturaLiquido * scaleY);
+      const liqY = botY - liqH_px;
+
+      const coilW_px = tankW_px * (d.diametroHelice / d.diametroTanque);
+      const impW_px = tankW_px * (d.diametroImpulsor / d.diametroTanque);
+      const impY = botY - Math.min(liqH_px * 0.25, 35);
+
+      let coilsSvg = '';
+      const nTurns = Math.min(40, Math.max(1, Math.round(d.numVueltas)));
+      const pitchPx = d.pasoVueltas * scaleY;
+      const startCoilY = botY - Math.min(22, liqH_px * 0.15);
+
+      for (let i = 0; i < nTurns; i++) {
+        const y = startCoilY - i * pitchPx;
+        if (y < 15) break;
+        const fuera = (y < liqY);
+        const color = fuera ? '#f43f5e' : '#b08440';
+        coilsSvg += `<ellipse cx="${cx}" cy="${y.toFixed(1)}" rx="${(coilW_px/2).toFixed(1)}" ry="4.5" fill="none" stroke="${color}" stroke-width="3"/>`;
+      }
+
+      svg.innerHTML = `
+        <rect x="${leftX}" y="${liqY.toFixed(1)}" width="${tankW_px}" height="${liqH_px.toFixed(1)}" fill="rgba(56, 189, 248, 0.18)"/>
+        <line x1="${leftX}" y1="${liqY.toFixed(1)}" x2="${leftX + tankW_px}" y2="${liqY.toFixed(1)}" stroke="#1f6b6a" stroke-width="2" stroke-dasharray="4 3"/>
+        <path d="M ${leftX} ${topY} L ${leftX} ${botY} Q ${cx} ${botY+16} ${leftX+tankW_px} ${botY} L ${leftX+tankW_px} ${topY}" fill="none" stroke="#6e7d7b" stroke-width="3"/>
+        <line x1="${cx}" y1="${topY - 12}" x2="${cx}" y2="${impY}" stroke="#5a6b69" stroke-width="3"/>
+        <rect x="${cx - impW_px/2}" y="${impY - 5}" width="${impW_px}" height="10" rx="2" fill="#3c4a48"/>
+        ${coilsSvg}
+        <text x="${leftX + 6}" y="${liqY - 5}" fill="#1f6b6a" font-size="10" font-family="sans-serif">Nivel caldo: ${d.alturaLiquido.toFixed(2)} m</text>
+      `;
+    }
+
+    async function recalcular() {
+      const params = new URLSearchParams();
+      campos.forEach(id => params.append(id, document.getElementById(id).value));
+      try {
+        const resp = await fetch('/api/calcular?' + params.toString());
+        const d = await resp.json();
+        ultimoJson = d;
+
+        const err = document.getElementById('errorBanner');
+        if (!d.valido) {
+          err.style.display = 'block';
+          err.textContent = d.mensajeError;
+          return;
+        }
+        err.style.display = 'none';
+
+        document.getElementById('kpiQ').textContent = d.qTotalKw.toFixed(2) + ' kW';
+        document.getElementById('kpiQSub').textContent = `Rxn: ${d.qReaccionKw.toFixed(2)} kW | Agit: ${d.potenciaAireadaKw.toFixed(2)} kW`;
+        document.getElementById('kpiU').textContent = d.uGlobal.toFixed(1);
+        document.getElementById('kpiA').textContent = d.areaReq.toFixed(3) + ' m²';
+        document.getElementById('kpiL').textContent = `Longitud tubo: ${d.longitudTubo.toFixed(2)} m`;
+        document.getElementById('kpiN').textContent = d.numVueltas.toFixed(1);
+        document.getElementById('kpiH').textContent = `Altura: ${d.alturaSerpentin.toFixed(2)} / ${d.alturaLiquido.toFixed(2)} m`;
+
+        document.getElementById('resDh').textContent = `${d.dhReaccion.toFixed(1)} kJ/mol`;
+        document.getElementById('resQrxn').textContent = `${d.qReaccionKw.toFixed(2)} kW`;
+        document.getElementById('resPg').textContent = `${Math.round(d.reAgitacion).toLocaleString()} / ${d.potenciaAireadaKw.toFixed(2)} kW`;
+        document.getElementById('resDtlm').textContent = `${d.dtlm.toFixed(2)} K`;
+        document.getElementById('resHo').textContent = `${d.ho.toFixed(1)} W/(m²·K)`;
+        document.getElementById('resHi').textContent = `${d.hi.toFixed(1)} W/(m²·K) · Re=${Math.round(d.reRef).toLocaleString()}`;
+        document.getElementById('resGeom').textContent = `${d.diametroHelice.toFixed(3)} m / ${d.alturaLiquido.toFixed(3)} m`;
+        document.getElementById('resFlow').textContent = `${d.flujoRefReq.toFixed(3)} kg/s`;
+        document.getElementById('resDp').textContent = `${d.caidaPresion.toFixed(2)} kPa`;
+
+        const setPill = (id, ok, txtOk, txtWarn) => {
+          const el = document.getElementById(id);
+          el.className = 'pill ' + (ok ? 'ok' : 'warn');
+          el.textContent = ok ? txtOk : txtWarn;
+        };
+        setPill('pillLiquid', d.cabeEnLiquido, '✓ Sumergido en caldo', '⚠ Rebasa nivel de caldo');
+        setPill('pillImpeller', d.libreImpulsor, '✓ Libre de impulsor', '⚠ Muy cerca del impulsor');
+        setPill('pillFlow', d.caudalSuficiente, '✓ Caudal suficiente', '⚠ Caudal insuficiente');
+
+        dibujarEsquema(d);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    function descargarReporte() {
+      if (!ultimoJson || !ultimoJson.valido) return;
+      const d = ultimoJson;
+      const texto = [
+        "====================================================================",
+        "  REPORTE TECNICO DE DISENO DE SERPENTIN DE ENFRIAMIENTO (C++17)    ",
+        "====================================================================",
+        `Entalpia de reaccion (|dHr|)     : ${d.dhReaccion.toFixed(2)} kJ/mol`,
+        `Calor metabolico (Q_rxn)         : ${d.qReaccionKw.toFixed(2)} kW`,
+        `Reynolds de agitacion (Re_a)     : ${d.reAgitacion.toFixed(0)}`,
+        `Potencia aireada disipada (Pg)   : ${d.potenciaAireadaKw.toFixed(2)} kW`,
+        `CARGA TERMICA TOTAL (Q_total)    : ${d.qTotalKw.toFixed(2)} kW`,
+        "--------------------------------------------------------------------",
+        `Diferencia media log. (DT_lm)    : ${d.dtlm.toFixed(2)} K`,
+        `Coeficiente lado caldo (ho)      : ${d.ho.toFixed(2)} W/(m^2*K)`,
+        `Coeficiente lado tubo (hi)       : ${d.hi.toFixed(2)} W/(m^2*K)`,
+        `COEFICIENTE GLOBAL (Uo)          : ${d.uGlobal.toFixed(2)} W/(m^2*K)`,
+        "--------------------------------------------------------------------",
+        `Area de transferencia (Ao)       : ${d.areaReq.toFixed(3)} m^2`,
+        `Longitud total de tubo (L)       : ${d.longitudTubo.toFixed(3)} m`,
+        `Diametro de la helice (D_h)      : ${d.diametroHelice.toFixed(3)} m`,
+        `Numero de vueltas (N)            : ${d.numVueltas.toFixed(2)} vueltas`,
+        `Altura serpentin / liquido       : ${d.alturaSerpentin.toFixed(3)} m / ${d.alturaLiquido.toFixed(3)} m`,
+        `Caudal requerido refrigerante    : ${d.flujoRefReq.toFixed(3)} kg/s`,
+        `Caida de presion estimada (dP)   : ${d.caidaPresion.toFixed(2)} kPa`,
+        "===================================================================="
+      ].join("\n");
+
+      const blob = new Blob([texto], { type: "text/plain;charset=utf-8" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "reporte_serpentin_cpp.txt";
+      a.click();
+    }
+
+    campos.forEach(id => document.getElementById(id).addEventListener('input', recalcular));
+    window.addEventListener('DOMContentLoaded', recalcular);
+  </script>
+
+<script id="nucoil-main-ui-enhance">
+(function(){
+  const saved = localStorage.getItem('nucoil-theme');
+  if (saved === 'dark' || saved === 'light') {
+    document.body.dataset.theme = saved;
+  }
+
+  function applyDarkSurfaces() {
+    const isDark = document.body.dataset.theme === 'dark';
+    document.querySelectorAll('div, section, article, header, aside').forEach(el => {
+      if (!isDark) {
+        if (el.dataset.darkSurface) delete el.dataset.darkSurface;
+        return;
+      }
+      if (el.classList.contains('nucoil-status-bad') || el.classList.contains('pill') || el.classList.contains('badge')) return;
+      const bg = getComputedStyle(el).backgroundColor;
+      if (bg === 'rgb(251, 250, 244)' || bg === 'rgb(244, 241, 232)' || bg === 'rgb(235, 230, 214)' || bg === 'rgb(255, 255, 255)') {
+        el.dataset.darkSurface = '1';
+      }
+    });
+  }
+
+  function buildPlanoHref() {
+    const qs = new URLSearchParams();
+    document.querySelectorAll('input[id], input[name]').forEach(el => {
+      if (el.value !== '') qs.set(el.id || el.name, el.value);
+    });
+    const base = location.protocol === 'file:' ? 'plano.html' : '/plano';
+    return base + (qs.toString() ? '?' + qs.toString() : '');
+  }
+
+  function injectHeaderButtons() {
+    document.querySelectorAll('span, div, small, b, strong').forEach(el => { if (el.children.length === 0 && /c\+\+17\s*engine/i.test(el.textContent || '')) el.style.display = 'none'; });
+    if (document.getElementById('btn-abrir-plano')) return;
+    const allBtns = [...document.querySelectorAll('button')];
+    const presetBtn = allBtns.find(b => /caso base|doran|reporte/i.test(b.textContent || ''));
+    const container = presetBtn ? presetBtn.parentElement : (document.querySelector('header') || document.body);
+
+    if (container) {
+      container.style.display = 'flex';
+      container.style.flexWrap = 'wrap';
+      container.style.gap = '8px';
+      container.style.alignItems = 'center';
+    }
+
+    const link2d = document.createElement('a');
+    link2d.id = 'btn-abrir-plano';
+    link2d.href = '/plano';
+    link2d.textContent = 'Plano en Sección 2D →';
+    link2d.addEventListener('click', function() {
+      link2d.href = buildPlanoHref();
+    });
+
+    const themeBtn = document.createElement('button');
+    themeBtn.type = 'button';
+    themeBtn.id = 'btn-theme-main';
+    themeBtn.className = presetBtn ? presetBtn.className : 'btn secondary';
+    themeBtn.textContent = 'Claro / oscuro';
+    themeBtn.addEventListener('click', function() {
+      const next = document.body.dataset.theme === 'dark' ? 'light' : 'dark';
+      document.body.dataset.theme = next;
+      localStorage.setItem('nucoil-theme', next);
+      applyDarkSurfaces();
+    });
+
+    container.appendChild(link2d);
+    container.appendChild(themeBtn);
+  }
+
+  let syncing = false;
+  function syncStatusColors() {
+    if (syncing) return;
+    syncing = true;
+    try {
+      document.querySelectorAll('input[type="number"], input[type="text"]').forEach(inp => {
+        const v = parseFloat(inp.value);
+        const id = (inp.id || inp.name || '').toLowerCase();
+        const allowNeg = id.includes('temp') || id.includes('t_') || id.includes('dh');
+        const allowZero = allowNeg || id.includes('factor') || id.includes('q_g') || id.includes('aire');
+        const badInp = Number.isFinite(v) && (allowZero ? v < 0 : (allowNeg ? false : v <= 0));
+        if (inp.classList.contains('nucoil-input-bad') !== badInp) {
+          inp.classList.toggle('nucoil-input-bad', badInp);
+        }
+      });
+
+      // Evaluar unicamente cada recuadro individual (no contenedores padre)
+      document.querySelectorAll('.pill, .badge').forEach(el => {
+        if (el.querySelector('.pill, .badge')) return;
+        const txt = (el.textContent || '').trim();
+        if (!/sumergencia|sumergido|impulsor|caudal|nivel|holgura/i.test(txt)) return;
+
+        const explicitlyOk = /^✓/.test(txt) && !/no|insuficiente|fuera|choca|inválido|invalido|excede/i.test(txt);
+        const isBadText = /^[✕✗✖⚠]|no|insuficiente|fuera|choca|inválido|invalido|excede/i.test(txt);
+        const isBadClass = /(bad|err|error|danger|warn|warning|fail)/i.test(el.className);
+        const shouldBeBad = !explicitlyOk && Boolean(isBadText || isBadClass);
+
+        if (el.classList.contains('nucoil-status-bad') !== shouldBeBad) {
+          el.classList.toggle('nucoil-status-bad', shouldBeBad);
+        }
+      });
+    } finally {
+      syncing = false;
+    }
+  }
+
+  function boot() {
+    document.querySelectorAll('section, .card, div').forEach(el => {
+      if (el.querySelector('h2, h3, h4, strong, b') && /fundamentaci[oó]n matem[aá]tica/i.test(el.textContent || '') && el.textContent.length < 1500) {
+        el.dataset.mathSection = '1';
+      }
+    });
+    injectHeaderButtons();
+    applyDarkSurfaces();
+    syncStatusColors();
+    document.addEventListener('input', () => setTimeout(syncStatusColors, 120));
+    document.addEventListener('change', () => setTimeout(syncStatusColors, 120));
+    document.addEventListener('click', (e) => {
+      if (e.target && e.target.closest('button')) {
+        setTimeout(() => { syncStatusColors(); applyDarkSurfaces(); }, 180);
+      }
+    });
+    setInterval(syncStatusColors, 900);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+})();
+</script>
 </body>
 </html>
