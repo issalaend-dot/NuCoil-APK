@@ -27,16 +27,17 @@ jobs:
         with:
           gradle-version: '8.7'
 
-      - name: Compilar APK con motor C++ (NDK)
+      - name: Firmar y compilar APK Release con motor C++
         run: |
           if [ -f "NuCoil-APK/settings.gradle" ]; then
             cd NuCoil-APK
           fi
-          gradle assembleDebug
-          cp app/build/outputs/apk/debug/app-debug.apk "$GITHUB_WORKSPACE/app-debug.apk"
+          keytool -genkeypair -v -keystore app/nucoil-release.jks -alias nucoil -keyalg RSA -keysize 2048 -validity 10000 -storepass nucoil_release_key -keypass nucoil_release_key -dname "CN=NuCoil Engineering, OU=Biotechnology, O=Academic Project, C=MX"
+          gradle assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/NuCoil-v1.0.apk"
 
       - name: Subir APK listo para descargar
         uses: actions/upload-artifact@v4
         with:
-          name: NuCoil-Android-APK
-          path: app-debug.apk
+          name: NuCoil-v1.0-APK
+          path: NuCoil-v1.0.apk
