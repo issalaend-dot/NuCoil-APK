@@ -28,10 +28,15 @@ jobs:
           gradle-version: '8.7'
 
       - name: Compilar APK con motor C++ (NDK)
-        run: gradle assembleDebug
+        run: |
+          if [ -f "NuCoil-APK/settings.gradle" ]; then
+            cd NuCoil-APK
+          fi
+          gradle assembleDebug
+          cp app/build/outputs/apk/debug/app-debug.apk "$GITHUB_WORKSPACE/app-debug.apk"
 
       - name: Subir APK listo para descargar
         uses: actions/upload-artifact@v4
         with:
           name: NuCoil-Android-APK
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: app-debug.apk
